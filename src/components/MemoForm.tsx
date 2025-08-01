@@ -1,18 +1,28 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useActionState, useOptimistic, startTransition } from 'react'
 import {
   Memo,
   MemoFormData,
   MEMO_CATEGORIES,
   DEFAULT_CATEGORIES,
 } from '@/types/memo'
+import dynamic from 'next/dynamic'
+
+const MDEditor = dynamic(() => import('@uiw/react-md-editor'), { ssr: false })
+
 
 interface MemoFormProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: MemoFormData) => void
+  onSubmit: (data: MemoFormData) => Promise<void>
   editingMemo?: Memo | null
+}
+
+interface FormState {
+  success: boolean
+  error?: string
+  pending: boolean
 }
 
 export default function MemoForm({
@@ -28,6 +38,14 @@ export default function MemoForm({
     tags: [],
   })
   const [tagInput, setTagInput] = useState('')
+  const [isPending, setIsPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Optimistic update state for better UX
+  const [optimisticFormData, setOptimisticFormData] = useOptimistic(
+    formData,
+    (state, newData: Partial<MemoFormData>) => ({ ...state, ...newData })
+  )
 
   // 편집 모드일 때 폼 데이터 설정
   useEffect(() => {
@@ -47,16 +65,39 @@ export default function MemoForm({
       })
     }
     setTagInput('')
+    setError(null)
   }, [editingMemo, isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.title.trim() || !formData.content.trim()) {
-      alert('제목과 내용을 모두 입력해주세요.')
+  // React 19 pattern: Enhanced form submission with startTransition
+  const handleSubmit = async (formDataSubmit: FormData) => {
+    const title = formDataSubmit.get('title') as string
+    const content = formDataSubmit.get('content') as string
+    const category = formDataSubmit.get('category') as string
+
+    if (!title?.trim() || !content?.trim()) {
+      setError('제목과 내용을 모두 입력해주세요.')
       return
     }
-    onSubmit(formData)
-    onClose()
+
+    setIsPending(true)
+    setError(null)
+
+    try {
+      // Use startTransition for smooth UI updates
+      startTransition(async () => {
+        await onSubmit({
+          title: title.trim(),
+          content: content.trim(),
+          category,
+          tags: formData.tags,
+        })
+        onClose()
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+    } finally {
+      setIsPending(false)
+    }
   }
 
   const handleAddTag = () => {
@@ -115,8 +156,15 @@ export default function MemoForm({
             </button>
           </div>
 
-          {/* 폼 */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* 에러 메시지 */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          {/* 폼 - React 19 새로운 form action 패턴 */}
+          <form action={handleSubmit} className="space-y-6">
             {/* 제목 */}
             <div>
               <label
@@ -128,15 +176,16 @@ export default function MemoForm({
               <input
                 type="text"
                 id="title"
-                value={formData.title}
-                onChange={e =>
-                  setFormData(prev => ({
-                    ...prev,
-                    title: e.target.value,
-                  }))
-                }
-                className="placeholder-gray-400 text-gray-400 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                name="title"
+                value={optimisticFormData.title}
+                onChange={e => {
+                  const newValue = e.target.value
+                  setFormData(prev => ({ ...prev, title: newValue }))
+                  setOptimisticFormData({ title: newValue })
+                }}
+                className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50"
                 placeholder="메모 제목을 입력하세요"
+                disabled={isPending}
                 required
               />
             </div>
@@ -151,14 +200,15 @@ export default function MemoForm({
               </label>
               <select
                 id="category"
-                value={formData.category}
-                onChange={e =>
-                  setFormData(prev => ({
-                    ...prev,
-                    category: e.target.value,
-                  }))
-                }
-                className="text-gray-400 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                name="category"
+                value={optimisticFormData.category}
+                onChange={e => {
+                  const newValue = e.target.value
+                  setFormData(prev => ({ ...prev, category: newValue }))
+                  setOptimisticFormData({ category: newValue })
+                }}
+                className="text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50"
+                disabled={isPending}
               >
                 {DEFAULT_CATEGORIES.map(category => (
                   <option key={category} value={category}>
@@ -169,26 +219,23 @@ export default function MemoForm({
             </div>
 
             {/* 내용 */}
-            <div>
+            <div data-color-mode="light">
               <label
                 htmlFor="content"
                 className="block text-sm font-medium text-gray-700 mb-2"
               >
                 내용 *
               </label>
-              <textarea
-                id="content"
-                value={formData.content}
-                onChange={e =>
-                  setFormData(prev => ({
-                    ...prev,
-                    content: e.target.value,
-                  }))
-                }
-                className="placeholder-gray-400 text-gray-400 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
-                placeholder="메모 내용을 입력하세요"
-                rows={8}
-                required
+              <input type="hidden" name="content" value={formData.content} />
+              <MDEditor
+                value={optimisticFormData.content}
+                onChange={(value) => {
+                  const newContent = value || ''
+                  setFormData(prev => ({ ...prev, content: newContent }))
+                  setOptimisticFormData({ content: newContent })
+                }}
+                preview="live"
+                data-testid="md-editor"
               />
             </div>
 
@@ -254,15 +301,39 @@ export default function MemoForm({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                disabled={isPending}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 취소
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+                disabled={isPending}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {editingMemo ? '수정하기' : '저장하기'}
+                {isPending ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    처리 중...
+                  </>
+                ) : (
+                  editingMemo ? '수정하기' : '저장하기'
+                )}
               </button>
             </div>
           </form>

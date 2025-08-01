@@ -1,3 +1,6 @@
+// DEPRECATED: localStorage 기반 유틸리티 (Supabase로 마이그레이션됨)
+// 이 파일은 백업 목적으로 유지되며, 실제로는 사용되지 않습니다.
+
 import { Memo } from '@/types/memo'
 
 const STORAGE_KEY = 'memo-app-memos'

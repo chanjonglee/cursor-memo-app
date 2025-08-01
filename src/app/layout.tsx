@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
+import "@uiw/react-md-editor/markdown-editor.css";
+import "@uiw/react-markdown-preview/markdown.css";
+import { MemoProvider } from '@/context/MemoContext'
+
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -27,7 +31,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <MemoProvider>
+          {children}
+        </MemoProvider>
       </body>
     </html>
   )
