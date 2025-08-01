@@ -8,6 +8,17 @@ export interface Memo {
   updatedAt: string
 }
 
+// Supabase 데이터베이스 타입과 호환을 위한 타입
+export interface MemoRow {
+  id: string
+  title: string
+  content: string
+  category: string
+  tags: string[] | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 export interface MemoFormData {
   title: string
   content: string

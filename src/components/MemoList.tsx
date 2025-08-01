@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Memo, MEMO_CATEGORIES, DEFAULT_CATEGORIES } from '@/types/memo'
 import MemoItem from './MemoItem'
+import MemoViewer from './MemoViewer'
 
 interface MemoListProps {
   memos: Memo[]
@@ -11,7 +13,7 @@ interface MemoListProps {
   onSearchChange: (query: string) => void
   onCategoryChange: (category: string) => void
   onEditMemo: (memo: Memo) => void
-  onDeleteMemo: (id: string) => void
+  onDeleteMemo: (id: string) => Promise<void> | void
   stats: {
     total: number
     filtered: number
@@ -30,6 +32,26 @@ export default function MemoList({
   onDeleteMemo,
   stats,
 }: MemoListProps) {
+  const [viewingMemo, setViewingMemo] = useState<Memo | null>(null)
+
+  const handleViewMemo = (memo: Memo) => {
+    setViewingMemo(memo)
+  }
+
+  const handleCloseViewer = () => {
+    setViewingMemo(null)
+  }
+
+  const handleEditFromViewer = (memo: Memo) => {
+    onEditMemo(memo)
+    handleCloseViewer()
+  }
+
+  const handleDeleteFromViewer = (id: string) => {
+    onDeleteMemo(id)
+    handleCloseViewer()
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -153,9 +175,19 @@ export default function MemoList({
               memo={memo}
               onEdit={onEditMemo}
               onDelete={onDeleteMemo}
+              onView={handleViewMemo}
             />
           ))}
         </div>
+      )}
+
+      {viewingMemo && (
+        <MemoViewer
+          memo={viewingMemo}
+          onClose={handleCloseViewer}
+          onEdit={handleEditFromViewer}
+          onDelete={handleDeleteFromViewer}
+        />
       )}
     </div>
   )
